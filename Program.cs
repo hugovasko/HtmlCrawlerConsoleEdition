@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Text;
+﻿using System.Text.RegularExpressions;
 
 namespace HtmlCrawlerConsoleEdition
 {
@@ -9,68 +6,94 @@ namespace HtmlCrawlerConsoleEdition
     {
         static void Main(string[] args)
         {
-            // Make a program that extracts content from an HTML file.
-            // The program must have a console interface.
-            // The program must get its parameters from the console.
-            // It must allow searching and modifying parts of the HTML document
-            // Building a tree model of a user-submitted document
-            // Note that some tags may not have a corresponding closing tag (e.g. <img>).
-            // If there is an error in the document, the program should report it.
+            string htmlDocPath = @"C:\Users\hugov\source\repos\HtmlCrawlerConsoleEdition\resources\htmlTemplate.html";
+            string htmlDoc = File.ReadAllText(htmlDocPath);
 
-            string htmlDocumentPath = @"C:\Users\hugov\source\repos\HtmlCrawlerConsoleEdition\resources\htmlTemplate.html";
-            string htmlDocument = File.ReadAllText(htmlDocumentPath);
+            var builder = new HtmlTreeBuilder();
+            var htmlTree = builder.BuildTree(htmlDoc);
 
-            HtmlDocument htmlDoc = new HtmlDocument(htmlDocument);
-
-            htmlDoc.PrintDocument();
+            builder.DisplayTree(htmlTree);
         }
     }
 
-    public class HtmlDocument
+    class HtmlTreeNode
     {
-        public HtmlDocument(string htmlDocument)
-        {
-            this.HtmlDocumentString = htmlDocument;
-            this.HtmlDocumentTree = new HtmlDocumentTree(htmlDocument);
-        }
+        public string Tag { get; set; }
+        public List<HtmlTreeNode> Children { get; set; }
 
-        public string HtmlDocumentString { get; set; }
-        public HtmlDocumentTree HtmlDocumentTree { get; set; }
-
-        public void PrintDocument()
+        public HtmlTreeNode(string tag)
         {
-            Console.WriteLine(this.HtmlDocumentString);
+            Tag = tag;
+            Children = new List<HtmlTreeNode>();
         }
     }
 
-    public class HtmlDocumentTree
+    class HtmlTreeBuilder
     {
-        public HtmlDocumentTree(string htmlDocument)
+        private HtmlTreeNode root;
+        private Stack<HtmlTreeNode> nodeStack;
+
+        public HtmlTreeBuilder()
         {
-            this.HtmlDocument = htmlDocument;
-            this.HtmlDocumentTreeNodes = new List<HtmlDocumentTreeNode>();
-            this.BuildTree();
+            nodeStack = new Stack<HtmlTreeNode>();
         }
 
-        public string HtmlDocument { get; set; }
-        public List<HtmlDocumentTreeNode> HtmlDocumentTreeNodes { get; set; }
-
-        public void BuildTree()
+        public HtmlTreeNode BuildTree(string html)
         {
+            root = null;
+            ParseHtml(html);
+            return root;
+        }
 
+        public void DisplayTree(HtmlTreeNode node)
+        {
+            DisplayTree(node, 0);
+        }
+
+        private void DisplayTree(HtmlTreeNode node, int depth)
+        {
+            if (node == null)
+                return;
+
+            Console.WriteLine($"{new string(' ', depth * 2)}{node.Tag}");
+
+            foreach (var child in node.Children)
+            {
+                DisplayTree(child, depth + 1);
+            }
+        }
+
+        private void ParseHtml(string html)
+        {
+            var tagRegex = new Regex("<(?<tag>[^>]+)>");
+            var matches = tagRegex.Matches(html);
+
+            foreach (Match match in matches)
+            {
+                string tag = match.Groups["tag"].Value;
+                HandleTag(tag);
+            }
+        }
+
+        private void HandleTag(string tag)
+        {
+            var node = new HtmlTreeNode(tag);
+
+            if (root == null)
+            {
+                root = node;
+                nodeStack.Push(root);
+            }
+            else
+            {
+                HtmlTreeNode current = nodeStack.Peek();
+                current.Children.Add(node);
+
+                if (!tag.EndsWith("/"))
+                {
+                    nodeStack.Push(node);
+                }
+            }
         }
     }
-
-    public class HtmlDocumentTreeNode
-    {
-        public HtmlDocumentTreeNode(string htmlDocument)
-        {
-            this.HtmlDocument = htmlDocument;
-            this.HtmlDocumentTreeNodes = new List<HtmlDocumentTreeNode>();
-        }
-
-        public string HtmlDocument { get; set; }
-        public List<HtmlDocumentTreeNode> HtmlDocumentTreeNodes { get; set; }
-    }
-
 }
