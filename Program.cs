@@ -55,11 +55,19 @@ namespace HtmlCrawlerConsoleEdition
             if (node == null)
                 return;
 
-            Console.WriteLine($"{new string(' ', depth * 2)}{node.Tag}");
+            // Extract the tag name without attributes for closing tag
+            var tagName = node.Tag.Split(' ')[0];
+
+            Console.WriteLine($"{new string(' ', depth * 2)}<{node.Tag}>");
 
             foreach (var child in node.Children)
             {
                 DisplayTree(child, depth + 1);
+            }
+
+            if (!IsSelfClosingTag(tagName))
+            {
+                Console.WriteLine($"{new string(' ', depth * 2)}</{tagName}>");
             }
         }
 
@@ -77,23 +85,48 @@ namespace HtmlCrawlerConsoleEdition
 
         private void HandleTag(string tag)
         {
-            var node = new HtmlTreeNode(tag);
-
-            if (root == null)
+            if (tag.StartsWith("/"))
             {
-                root = node;
-                nodeStack.Push(root);
+                nodeStack.Pop();
             }
             else
             {
-                HtmlTreeNode current = nodeStack.Peek();
-                current.Children.Add(node);
-
-                if (!tag.EndsWith("/"))
+                var node = new HtmlTreeNode(tag);
+                if (root == null)
                 {
-                    nodeStack.Push(node);
+                    root = node;
+                    nodeStack.Push(root);
+                }
+                else
+                {
+                    HtmlTreeNode current = nodeStack.Peek();
+                    current.Children.Add(node);
+
+                    if (!tag.EndsWith("/") && !IsSelfClosingTag(tag))
+                    {
+                        nodeStack.Push(node);
+                    }
                 }
             }
         }
+        private bool IsSelfClosingTag(string tag)
+        {
+            // List of self-closing tags
+            var selfClosingTags = new List<string> { "area", "base", "br", "col", "command", "embed", "hr", "img", "input", "keygen", "link", "meta", "param", "source", "track", "wbr" };
+
+            // Extract the tag name without attributes
+            var tagName = tag.Split(' ')[0];
+
+            Console.WriteLine($"Is {tagName} self-closing? {selfClosingTags.Contains(tagName)} the tag is {tag}");
+
+            return selfClosingTags.Contains(tagName);
+        }
+        /*private bool IsSelfClosingTag(string tag)
+        {
+            // Check if the tag ends with "/>"
+            return tag.EndsWith("/");
+        }*/
+
+
     }
 }
