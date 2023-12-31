@@ -1,4 +1,7 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace HtmlCrawlerConsoleEdition
 {
@@ -6,127 +9,218 @@ namespace HtmlCrawlerConsoleEdition
     {
         static void Main(string[] args)
         {
-            string htmlDocPath = @"C:\Users\hugov\source\repos\HtmlCrawlerConsoleEdition\resources\htmlTemplate.html";
-            string htmlDoc = File.ReadAllText(htmlDocPath);
+            string filePath = @"C:\Users\hugov\source\repos\HtmlCrawlerConsoleEdition\resources\simpleHtml.html";
+            HtmlParser parser = new HtmlParser();
+            Node tree = parser.Parse(filePath);
 
-            var builder = new HtmlTreeBuilder();
-            var htmlTree = builder.BuildTree(htmlDoc);
+            // Print the tree structure
+            // Console.WriteLine(tree);
 
-            builder.DisplayTree(htmlTree);
-        }
-    }
-
-    class HtmlTreeNode
-    {
-        public string Tag { get; set; }
-        public List<HtmlTreeNode> Children { get; set; }
-
-        public HtmlTreeNode(string tag)
-        {
-            Tag = tag;
-            Children = new List<HtmlTreeNode>();
-        }
-    }
-
-    class HtmlTreeBuilder
-    {
-        private HtmlTreeNode root;
-        private Stack<HtmlTreeNode> nodeStack;
-
-        public HtmlTreeBuilder()
-        {
-            nodeStack = new Stack<HtmlTreeNode>();
+            // Print the path
+            string input = Console.ReadLine();
+            if (input.StartsWith("PRINT"))
+            {
+                string path = input.Substring(6);
+                PrintPath(tree, path);
+            }
         }
 
-        public HtmlTreeNode BuildTree(string html)
+        static public void PrintPath(Node node, string path)
         {
-            root = null;
-            ParseHtml(html);
-            return root;
+            string[] parts = path.Split('/');
+            PrintPath(node, parts, 0);
         }
 
-        public void DisplayTree(HtmlTreeNode node)
+        private static void PrintPath(Node node, string[] parts, int index)
         {
-            DisplayTree(node, 0);
-        }
-
-        private void DisplayTree(HtmlTreeNode node, int depth)
-        {
-            if (node == null)
+            if (node == null || index >= parts.Length)
+            {
                 return;
-
-            // Extract the tag name without attributes for closing tag
-            var tagName = node.Tag.Split(' ')[0];
-
-            Console.WriteLine($"{new string(' ', depth * 2)}<{node.Tag}>");
-
-            foreach (var child in node.Children)
-            {
-                DisplayTree(child, depth + 1);
             }
 
-            if (!IsSelfClosingTag(tagName))
+            if (node.Tag.Equals(parts[index], StringComparison.OrdinalIgnoreCase) || parts[index] == "")
             {
-                Console.WriteLine($"{new string(' ', depth * 2)}</{tagName}>");
-            }
-        }
+                Console.WriteLine(node);
 
-        private void ParseHtml(string html)
-        {
-            var tagRegex = new Regex("<(?<tag>[^>]+)>");
-            var matches = tagRegex.Matches(html);
-
-            foreach (Match match in matches)
-            {
-                string tag = match.Groups["tag"].Value;
-                HandleTag(tag);
-            }
-        }
-
-        private void HandleTag(string tag)
-        {
-            if (tag.StartsWith("/"))
-            {
-                nodeStack.Pop();
-            }
-            else
-            {
-                var node = new HtmlTreeNode(tag);
-                if (root == null)
+                foreach (var childNode in node.ChildNodes)
                 {
-                    root = node;
-                    nodeStack.Push(root);
+                    PrintPath(childNode, parts, index + (node.Tag.Equals(parts[index], StringComparison.OrdinalIgnoreCase) ? 1 : 0));
+                }
+            }
+
+            return;
+        }
+        public class Node
+        {
+            public string Tag;
+            public string Attributes;
+            public bool IsSelfClosing;
+            public string Content;
+            public List<Node> ChildNodes;
+
+            public Node(string tag, string attributes = "", bool isSelfClosing = false)
+            {
+                Tag = tag;
+                Attributes = attributes;
+                IsSelfClosing = isSelfClosing;
+                Content = "";
+                ChildNodes = new List<Node>();
+            }
+
+            public override string ToString()
+            {
+                StringBuilder sb = new StringBuilder();
+                PrintNode(sb, this, 0);
+                return sb.ToString();
+            }
+
+            private void PrintNode(StringBuilder sb, Node node, int depth)
+            {
+                string attributes = string.IsNullOrEmpty(node.Attributes) ? "" : $" {node.Attributes}";
+                sb.AppendLine($"{new string(' ', depth * 2)}<{node.Tag}{attributes}{(node.IsSelfClosing ? "/" : "")}>");
+
+                if (!string.IsNullOrEmpty(node.Content))
+                {
+                    sb.AppendLine($"{new string(' ', (depth + 1) * 2)}{node.Content}");
+                }
+
+                foreach (var childNode in node.ChildNodes)
+                {
+                    PrintNode(sb, childNode, depth + 1);
+                }
+
+                if (!node.IsSelfClosing)
+                {
+                    sb.AppendLine($"{new string(' ', depth * 2)}</{node.Tag}>");
+                }
+            }
+        }
+
+        public class HtmlParser
+        {
+            public Node Parse(string filePath)
+            {
+                Node root = null;
+                Stack<Node> openTags = new Stack<Node>();
+                Node currentNode = null;
+
+                try
+                {
+                    string html = File.ReadAllText(filePath);
+                    HtmlTokenizer tokenizer = new HtmlTokenizer(html);
+
+                    string token;
+                    while ((token = tokenizer.NextToken()) != null)
+                    {
+                        if (token.StartsWith("<"))
+                        {
+                            if (token.StartsWith("</"))
+                            {
+                                // Closing tag
+                                string tagName = token.Substring(2, token.Length - 3);
+                                if (currentNode.Tag == tagName)
+                                {
+                                    currentNode = openTags.Count > 0 ? openTags.Pop() : null;
+                                }
+                                else
+                                {
+                                    Console.WriteLine("currentNode.Tag: " + currentNode.Tag);
+                                    Console.WriteLine("tagName: " + tagName);
+                                    throw new Exception("Invalid HTML structure");
+                                }
+                            }
+                            else
+                            {
+                                // Opening or self-closing tag
+                                bool isSelfClosing = token.EndsWith("/>");
+                                string tagName = token.Substring(1, token.Length - (isSelfClosing ? 3 : 2));
+                                string attributes = "";
+                                int spaceIndex = tagName.IndexOf(" ");
+                                if (spaceIndex > -1)
+                                {
+                                    attributes = tagName.Substring(spaceIndex + 1);
+                                    tagName = tagName.Substring(0, spaceIndex);
+                                }
+
+                                Node node = new Node(tagName, attributes, isSelfClosing);
+
+                                if (currentNode == null)
+                                {
+                                    root = node;
+                                }
+                                else
+                                {
+                                    currentNode.ChildNodes.Add(node);
+                                }
+
+                                if (!isSelfClosing)
+                                {
+                                    openTags.Push(currentNode);
+                                    currentNode = node;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Content
+                            if (currentNode != null)
+                            {
+                                currentNode.Content += token;
+                            }
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Error parsing HTML file: " + e.Message);
+                }
+
+                return root;
+            }
+        }
+
+        public class HtmlTokenizer
+        {
+            private readonly string _html;
+            private int _position;
+
+            public HtmlTokenizer(string html)
+            {
+                _html = html;
+                _position = 0;
+            }
+
+            public string NextToken()
+            {
+                if (_position >= _html.Length)
+                {
+                    return null;
+                }
+
+                if (_html[_position] == '<')
+                {
+                    int end = _html.IndexOf('>', _position);
+                    if (end == -1)
+                    {
+                        throw new Exception("Invalid HTML structure");
+                    }
+
+                    string token = _html.Substring(_position, end - _position + 1);
+                    _position = end + 1;
+                    return token.Trim();
                 }
                 else
                 {
-                    HtmlTreeNode current = nodeStack.Peek();
-                    current.Children.Add(node);
-
-                    if (!tag.EndsWith("/") && !IsSelfClosingTag(tag))
+                    int start = _position;
+                    while (_position < _html.Length && _html[_position] != '<')
                     {
-                        nodeStack.Push(node);
+                        _position++;
                     }
+
+                    return _html.Substring(start, _position - start).Trim();
                 }
             }
         }
-        private bool IsSelfClosingTag(string tag)
-        {
-            // List of self-closing tags
-            var selfClosingTags = new List<string> { "area", "base", "br", "col", "command", "embed", "hr", "img", "input", "keygen", "link", "meta", "param", "source", "track", "wbr" };
-
-            // Extract the tag name without attributes
-            var tagName = tag.Split(' ')[0];
-
-            Console.WriteLine($"Is {tagName} self-closing? {selfClosingTags.Contains(tagName)} the tag is {tag}");
-
-            return selfClosingTags.Contains(tagName);
-        }
-        /*private bool IsSelfClosingTag(string tag)
-        {
-            // Check if the tag ends with "/>"
-            return tag.EndsWith("/");
-        }*/
-
-
     }
+
 }
